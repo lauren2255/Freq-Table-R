@@ -24,15 +24,27 @@ Include current age in the table.
 ## Metadata
 #### Demographic Dataset:
 id: Participant ID
+
 names: Participant first and last name
+
 email: Participant email
+
 dob: Participant Date of Birth
+
 sex: Participant Sex
+
 diagnosis: Participant Diagnosis
+
 race: Participant Race
+
 ethnicity: Participant Ethnicity
+
 Test Dataset:
+
 id: Participant ID
+
 visit_date: Date of Research Visit
+
 visit_num: Research Visit Number
+
 abc_01 to abc_10: ABC Test Questions 1 to 10
