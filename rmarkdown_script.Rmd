@@ -1,0 +1,172 @@
+---
+title: "data_challenge"
+author: "LAT"
+date: "2024-02-15"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Frequency tables for research participant diversity
+
+```{r}
+# import packages
+library(tidyr)
+library(dplyr, warn.conflicts=FALSE)
+library(janitor, warn.conflicts=FALSE)
+```
+
+```{r}
+# read in CSVs
+az_demo <- read.csv("az_demo.csv")
+az_test <- read.csv("az_test.csv")
+```
+
+```{r}
+# investigate data
+colnames(az_demo) 
+str(az_demo) 
+summary(az_demo) 
+```
+
+## 1. Table of names and ages
+
+a.  Separate names using tidyr's separate function
+
+```{r}
+az_demo <- separate(az_demo, names, into = c("last_name", "first_name"), sep = ",", remove = FALSE) 
+```
+
+b.  Calculate age from dob
+
+```{r}
+az_demo$dob <- as.Date(az_demo$dob) 
+today <- as.Date(Sys.Date()) 
+az_demo$age_yrs <- round(as.numeric(today - az_demo$dob) / 365.25, 2) 
+```
+
+c.  Print table
+
+```{r}
+table <- head(az_demo[, c("id", "names", "first_name", "last_name", "dob", "age_yrs")], n = 5) 
+print(table)
+```
+
+## 2. Create a frequency/cross tab table of total participants by diagnosis and URG Status
+
+a.  Determine URG status
+
+```{r}
+az_demo$URG <- "" 
+az_demo$URG <- ifelse(az_demo$race == "White" & az_demo$ethnicity == "Not Hispanic", "Non-URG", ifelse(az_demo$race == "Other" & az_demo$ethnicity == "Not Hispanic", "Unknown", "URG"))
+```
+
+b.  Build table with diagnosis as rows and URG status as columns using dplyr package
+
+```{r}
+freq_table <- az_demo %>%
+  count(diagnosis, URG) %>%
+  spread(URG, n, fill = 0) %>%
+  mutate(Total = URG + `Non-URG` + Unknown) %>%
+  relocate(URG, .before = Unknown) 
+```
+
+c.  Add column and row totals using janitor package
+
+```{r}
+freq_table <- adorn_totals(freq_table)
+```
+
+d.  Include 4 columns for percent of total for all columns + clean up table
+
+```{r}
+# make new cols hold percents
+freq_table <- freq_table %>%
+  mutate(`Non-URG_percent` = (`Non-URG` / tail(`Non-URG`, 1)) * 100) %>%
+  mutate(URG_percent = (URG / tail(URG, 1)) * 100) %>%
+  mutate(Unknown_percent = (Unknown / tail(Unknown, 1)) * 100) %>%
+  mutate(Total_percent = (Total / tail(Total, 1)) * 100)
+
+# reorder columns
+freq_table <- freq_table %>%
+  select(diagnosis, `Non-URG`, `Non-URG_percent`, URG, URG_percent, Unknown, Unknown_percent, Total, Total_percent)
+
+# round percent values
+freq_table$URG_percent <- round(freq_table$URG_percent, 2)
+freq_table$`Non-URG_percent` <- round(freq_table$`Non-URG_percent`, 2)
+freq_table$Unknown_percent <- round(freq_table$Unknown_percent, 2)
+freq_table$Total_percent <- round(freq_table$Total_percent, 2)
+
+# add percent signs
+freq_table$URG_percent <- paste(freq_table$URG_percent, "%", sep = "")
+freq_table$`Non-URG_percent` <- paste(freq_table$`Non-URG_percent`, "%", sep = "")
+freq_table$Unknown_percent <- paste(freq_table$Unknown_percent, "%", sep = "")
+freq_table$Total_percent <- paste(freq_table$Total_percent, "%", sep = "")
+
+# reorder rows + reset index
+new_order <- c(1, 4, 2, 3, 6, 5, 7)
+freq_table <- freq_table[new_order, ]
+row.names(freq_table) <- NULL
+
+# rename columns
+freq_table <- freq_table %>%
+  rename("URG N"= URG, "Non-URG N" = `Non-URG`, "Unknown N" = Unknown, "Total N" = Total, "Diagnosis" = diagnosis, "URG % of Total" = URG_percent, "Non-URG % of Total" = `Non-URG_percent`, "Unknown % of Total" = Unknown_percent, "Total % of Total" = Total_percent)
+
+freq_table
+```
+
+## 3. Score ABC test and calculate age at visit
+
+a.  Score ABC test
+
+```{r}
+az_test$sum_score <- rowSums(az_test[, c("abc_01", "abc_02", "abc_03", "abc_04", "abc_05", "abc_06", "abc_07", "abc_08", "abc_09", "abc_10")])
+az_test$mean_score <- az_test$sum_score / 10
+```
+
+b.  Calculate age at visit
+
+```{r}
+az_test$visit_date <- as.Date(az_test$visit_date)
+```
+
+```{r}
+# merge datasets
+az_merged <- merge(az_demo, az_test, by.x = "id")
+az_merged$visit_age_yrs <- round(as.numeric(az_merged$visit_date - az_merged$dob) / 365.25, 2)
+az_merged <- relocate(az_merged, visit_age_yrs, .before = visit_num)
+```
+
+## 4. Latest visit and current age
+
+a.  Gather latest visits with groupby
+
+```{r}
+latest_visits <- az_merged %>%
+  group_by(id) %>%
+  filter(visit_num == max(visit_num)) %>%
+  summarise(visit_num)
+```
+
+b.  Add participant's current age
+
+```{r}
+latest_visits <- az_merged %>%
+  group_by(id) %>%
+  filter(visit_num == max(visit_num)) %>%
+  summarise(visit_num, age_yrs)
+```
+
+c.  Print table of first 5 rows for specified columns
+
+```{r}
+latest_visits <- az_merged %>%
+  group_by(id) %>%
+  filter(visit_num == max(visit_num)) %>%
+  ungroup()
+head(latest_visits[c("id", "visit_num", "visit_date", "visit_age_yrs", "age_yrs", "sum_score")], 5)
+```
